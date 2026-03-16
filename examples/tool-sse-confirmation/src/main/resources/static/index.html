@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Spring AI — SSE Tool Confirmation</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #1a1a1a; padding: 2rem; }
+    h1 { font-size: 1.4rem; margin-bottom: 1.5rem; }
+    h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #444; }
+
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+
+    /* Chat panel */
+    .panel { background: #fff; border-radius: 8px; padding: 1.25rem; box-shadow: 0 1px 4px #0001; }
+    #log { height: 320px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 6px;
+           padding: 0.75rem; font-size: 0.85rem; line-height: 1.6; margin-bottom: 0.75rem; background: #fafafa; }
+    .msg-user { color: #1a56db; margin-bottom: 0.5rem; }
+    .msg-agent { color: #166534; margin-bottom: 0.5rem; }
+    .msg-error { color: #b91c1c; margin-bottom: 0.5rem; }
+    .chat-input { display: flex; gap: 0.5rem; }
+    #messageInput { flex: 1; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; }
+    button { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    #sendBtn { background: #1a56db; color: #fff; }
+    #sendBtn:disabled { background: #93c5fd; cursor: default; }
+
+    /* Confirmation cards */
+    #confirmations { display: flex; flex-direction: column; gap: 0.75rem; }
+    .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem;
+            box-shadow: 0 1px 3px #0001; }
+    .card-title { font-weight: 600; margin-bottom: 0.4rem; }
+    .card-meta { font-size: 0.8rem; color: #666; margin-bottom: 0.2rem; }
+    .card-reason { font-size: 0.82rem; color: #92400e; background: #fef3c7;
+                   border-radius: 4px; padding: 0.35rem 0.6rem; margin: 0.5rem 0; }
+    .card-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+    .btn-approve { background: #16a34a; color: #fff; }
+    .btn-reject  { background: #dc2626; color: #fff; }
+    .btn-approve:hover { background: #15803d; }
+    .btn-reject:hover  { background: #b91c1c; }
+
+    /* SSE status badge */
+    #status { display: inline-flex; align-items: center; gap: 0.4rem;
+              font-size: 0.8rem; margin-bottom: 1rem; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
+    .dot.connected { background: #16a34a; }
+    .dot.error { background: #dc2626; }
+
+    .empty { color: #9ca3af; font-size: 0.85rem; text-align: center; padding: 2rem 0; }
+  </style>
+</head>
+<body>
+
+<h1>Spring AI — SSE Tool Confirmation Demo</h1>
+
+<div id="status"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
+
+<div class="layout">
+
+  <!-- Chat -->
+  <div class="panel">
+    <h2>Chat</h2>
+    <div id="log"></div>
+    <div class="chat-input">
+      <input id="messageInput" type="text" placeholder='e.g. "Place an order for 2 laptops"'/>
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
+  <!-- Pending confirmations -->
+  <div class="panel">
+    <h2>Pending Confirmations</h2>
+    <div id="confirmations"><p class="empty">No pending confirmations.</p></div>
+  </div>
+
+</div>
+
+<script>
+  // ── SSE connection ──────────────────────────────────────────────────────────
+  const dot = document.getElementById('dot');
+  const statusText = document.getElementById('statusText');
+
+  function connect() {
+    const es = new EventSource('/confirmations/stream');
+
+    es.addEventListener('open', () => {
+      dot.className = 'dot connected';
+      statusText.textContent = 'Connected — waiting for confirmations';
+    });
+
+    es.addEventListener('confirmation', e => {
+      const data = JSON.parse(e.data);
+      addCard(data);
+    });
+
+    es.addEventListener('error', () => {
+      dot.className = 'dot error';
+      statusText.textContent = 'Disconnected — retrying…';
+    });
+  }
+
+  connect();
+
+  // ── Confirmation cards ──────────────────────────────────────────────────────
+  const confirmationsEl = document.getElementById('confirmations');
+
+  function addCard({ id, tool, input, reason }) {
+    // Remove the empty placeholder
+    confirmationsEl.querySelectorAll('.empty').forEach(el => el.remove());
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'card-' + id;
+    card.innerHTML = `
+      <div class="card-title">🔔 ${escapeHtml(tool)}</div>
+      <div class="card-meta"><b>ID:</b> ${escapeHtml(id)}</div>
+      <div class="card-meta"><b>Input:</b> <code>${escapeHtml(input)}</code></div>
+      ${reason ? `<div class="card-reason">${escapeHtml(reason)}</div>` : ''}
+      <div class="card-actions">
+        <button class="btn-approve" onclick="approve('${id}')">Approve</button>
+        <button class="btn-reject"  onclick="rejectPrompt('${id}')">Reject</button>
+      </div>`;
+    confirmationsEl.prepend(card);
+  }
+
+  function removeCard(id) {
+    const card = document.getElementById('card-' + id);
+    if (card) card.remove();
+    if (confirmationsEl.children.length === 0) {
+      confirmationsEl.innerHTML = '<p class="empty">No pending confirmations.</p>';
+    }
+  }
+
+  async function approve(id) {
+    await fetch(`/confirmations/${id}/approve`, { method: 'POST' });
+    removeCard(id);
+  }
+
+  async function rejectPrompt(id) {
+    const reason = prompt('Reason for rejection:');
+    if (reason === null) return;   // cancelled
+    await fetch(`/confirmations/${id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason || 'Rejected by user' })
+    });
+    removeCard(id);
+  }
+
+  // ── Chat ────────────────────────────────────────────────────────────────────
+  const log = document.getElementById('log');
+  const input = document.getElementById('messageInput');
+  const sendBtn = document.getElementById('sendBtn');
+
+  function appendLog(text, cls) {
+    const p = document.createElement('p');
+    p.className = cls;
+    p.textContent = text;
+    log.appendChild(p);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const message = input.value.trim();
+    if (!message) return;
+    input.value = '';
+    sendBtn.disabled = true;
+    appendLog('You: ' + message, 'msg-user');
+
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+      });
+      const data = await res.json();
+      appendLog('Agent: ' + data.response, 'msg-agent');
+    } catch (err) {
+      appendLog('Error: ' + err.message, 'msg-error');
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+</script>
+</body>
+</html>
