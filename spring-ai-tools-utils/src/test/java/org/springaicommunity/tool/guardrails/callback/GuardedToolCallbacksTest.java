@@ -14,7 +14,6 @@ import org.springaicommunity.tool.guardrails.output.OutputGuardrailResult;
 import org.springaicommunity.tool.guardrails.output.ToolOutputGuardrail;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
-import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.context.ApplicationContext;
 
 import java.lang.reflect.Method;
@@ -29,8 +28,6 @@ class GuardedToolCallbacksTest {
     @Mock ToolCallback delegate;
 
     GuardedToolCallbacks guardedToolCallbacks;
-
-    // ── tool fixtures ─────────────────────────────────────────────────────────
 
     static class PassingInputGuardrail implements ToolInputGuardrail {
         @Override public InputGuardrailResult evaluate(ToolDefinition toolDefinition, String toolInput) {
@@ -66,14 +63,10 @@ class GuardedToolCallbacksTest {
         public String myTool(String input) { return input; }
     }
 
-    // ── setup ─────────────────────────────────────────────────────────────────
-
     @BeforeEach
     void setUp() {
         guardedToolCallbacks = new GuardedToolCallbacks(applicationContext);
     }
-
-    // ── tests ─────────────────────────────────────────────────────────────────
 
     @Test
     void wrap_returnsOriginalCallback_whenNoGuardrailAnnotations() throws Exception {
@@ -115,4 +108,5 @@ class GuardedToolCallbacksTest {
 
         assertThat(result).isInstanceOf(GuardedToolCallback.class);
     }
+
 }

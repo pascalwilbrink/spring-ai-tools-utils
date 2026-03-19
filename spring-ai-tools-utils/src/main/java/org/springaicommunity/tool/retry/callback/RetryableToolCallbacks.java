@@ -34,12 +34,11 @@ public class RetryableToolCallbacks extends AbstractToolCallbacks {
      *
      * @param cb         the callback to wrap
      * @param method     the tool method, inspected for the {@link RetryableTool} annotation
-     * @param toolObject the bean that owns the tool method (unused, kept for API symmetry)
      * @return the original callback if the annotation is absent, otherwise a
      *         {@link RetryableToolCallback} with the configured retry policy
      * @throws IllegalStateException if {@link RetryableTool#maxRetries()} is not positive
      */
-    public ToolCallback wrap(ToolCallback cb, Method method, Object toolObject) {
+    public ToolCallback wrap(ToolCallback cb, Method method) {
         RetryableTool annotation = method.getAnnotation(RetryableTool.class);
         if (annotation == null) return cb;
 
@@ -47,6 +46,10 @@ public class RetryableToolCallbacks extends AbstractToolCallbacks {
 
         return RetryableToolCallback.wrap(cb)
             .maxRetries(annotation.maxRetries())
+            .delay(annotation.delay())
+            .multiplier(annotation.multiplier())
+            .retryOn(annotation.retryOn())
+            .noRetryOn(annotation.noRetryOn())
             .build();
     }
 

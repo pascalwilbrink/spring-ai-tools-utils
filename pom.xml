@@ -64,6 +64,7 @@
         <spring-ai.version>1.1.2</spring-ai.version>
         <spring-boot.version>3.5.8</spring-boot.version>
         <caffeine.version>3.2.0</caffeine.version>
+        <com-guava.version>33.5.0-jre</com-guava.version>
 
         <!-- test dependency versions -->
         <junit-jupiter.version>5.11.4</junit-jupiter.version>
@@ -112,6 +113,11 @@
                 <groupId>org.springframework.retry</groupId>
                 <artifactId>spring-retry</artifactId>
                 <version>${spring-retry.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${com-guava.version}</version>
             </dependency>
             <!-- Test -->
             <dependency>

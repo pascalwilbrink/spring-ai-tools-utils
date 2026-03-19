@@ -10,6 +10,8 @@ public interface ConfirmationStore {
 
     /**
      * Persists a pending confirmation record.
+     *
+     * @param pendingConfirmation the confirmation to store
      */
     void save(PendingConfirmation pendingConfirmation);
 

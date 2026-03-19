@@ -35,8 +35,6 @@ class AbstractToolCallbacksTest {
         NoNoArgService(String required) {}
     }
 
-    // ── resolve: bean found in context ────────────────────────────────────────
-
     @Test
     void resolve_returnsBean_whenPresentInContext() {
         ConcreteService bean = new ConcreteService();
@@ -47,8 +45,6 @@ class AbstractToolCallbacksTest {
 
         assertThat(result).isSameAs(bean);
     }
-
-    // ── resolve: reflection fallback when no bean ─────────────────────────────
 
     @Test
     void resolve_instantiatesViaReflection_whenBeanNotFound() {
@@ -61,8 +57,6 @@ class AbstractToolCallbacksTest {
         assertThat(result).isInstanceOf(NoArgService.class);
     }
 
-    // ── resolve: IllegalStateException when both fail ─────────────────────────
-
     @Test
     void resolve_throwsIllegalStateException_whenBeanMissingAndNoNoArgConstructor() {
         when(applicationContext.getBean(NoNoArgService.class))
@@ -74,4 +68,5 @@ class AbstractToolCallbacksTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining(NoNoArgService.class.getName());
     }
+
 }

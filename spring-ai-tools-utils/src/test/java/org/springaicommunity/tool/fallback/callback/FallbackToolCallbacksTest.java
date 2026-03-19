@@ -24,8 +24,6 @@ class FallbackToolCallbacksTest {
 
     FallbackToolCallbacks fallbackToolCallbacks;
 
-    // ── tool classes used as test fixtures ───────────────────────────────────
-
     static class MessageFallbackTools {
         @Tool(name = "myTool")
         @FallbackTool(message = "service unavailable")
@@ -65,14 +63,10 @@ class FallbackToolCallbacksTest {
         public String myTool(String input) { return input; }
     }
 
-    // ── setup ─────────────────────────────────────────────────────────────────
-
     @BeforeEach
     void setUp() {
         fallbackToolCallbacks = new FallbackToolCallbacks(applicationContext);
     }
-
-    // ── tests ─────────────────────────────────────────────────────────────────
 
     @Test
     void wrap_returnsOriginalCallback_whenNoAnnotationPresent() throws Exception {
@@ -145,4 +139,5 @@ class FallbackToolCallbacksTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("doesNotExist");
     }
+
 }

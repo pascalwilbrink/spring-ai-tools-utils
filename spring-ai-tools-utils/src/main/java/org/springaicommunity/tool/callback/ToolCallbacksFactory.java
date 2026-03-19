@@ -1,10 +1,14 @@
 package org.springaicommunity.tool.callback;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.tool.confirmation.callback.ConfirmableToolCallbacks;
 import org.springaicommunity.tool.fallback.callback.FallbackToolCallbacks;
 import org.springaicommunity.tool.guardrails.callback.GuardedToolCallbacks;
+import org.springaicommunity.tool.logging.callback.LoggingToolCallback;
+import org.springaicommunity.tool.metrics.callback.MetricsToolCallback;
+import org.springaicommunity.tool.ratelimit.callback.RateLimitedToolCallbacks;
 import org.springaicommunity.tool.retry.callback.RetryableToolCallbacks;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
@@ -26,6 +30,9 @@ public class ToolCallbacksFactory {
     private final ConfirmableToolCallbacks confirmableToolCallbacks;
     private final FallbackToolCallbacks fallbackToolCallbacks;
     private final RetryableToolCallbacks retryableToolCallbacks;
+    private final RateLimitedToolCallbacks rateLimitedToolCallbacks;
+
+    private final MeterRegistry meterRegistry;
 
     /**
      * Constructs the factory with the decorator layers that will be applied to
@@ -40,12 +47,16 @@ public class ToolCallbacksFactory {
         GuardedToolCallbacks guardedToolCallbacks,
         ConfirmableToolCallbacks confirmableToolCallbacks,
         FallbackToolCallbacks fallbackToolCallbacks,
-        RetryableToolCallbacks retryableToolCallbacks
+        RetryableToolCallbacks retryableToolCallbacks,
+        RateLimitedToolCallbacks rateLimitedToolCallbacks,
+        MeterRegistry meterRegistry
     ) {
         this.guardedToolCallbacks = guardedToolCallbacks;
         this.confirmableToolCallbacks = confirmableToolCallbacks;
         this.fallbackToolCallbacks = fallbackToolCallbacks;
         this.retryableToolCallbacks = retryableToolCallbacks;
+        this.rateLimitedToolCallbacks = rateLimitedToolCallbacks;
+        this.meterRegistry = meterRegistry;
     }
 
     /**
@@ -69,10 +80,19 @@ public class ToolCallbacksFactory {
 
         if (method == null) return cb;
 
+
         cb = guardedToolCallbacks.wrap(cb, method);
+        cb = rateLimitedToolCallbacks.wrap(cb, method);
+        cb = retryableToolCallbacks.wrap(cb, method);
         cb = confirmableToolCallbacks.wrap(cb, method);
-        cb = retryableToolCallbacks.wrap(cb, method, toolObject);
         cb = fallbackToolCallbacks.wrap(cb, method, toolObject);
+        cb = LoggingToolCallback.wrap(cb).build();
+
+        if (meterRegistry != null) {
+            cb = MetricsToolCallback.wrap(cb)
+                .meterRegistry(meterRegistry)
+                .build();
+        }
 
         return cb;
     }

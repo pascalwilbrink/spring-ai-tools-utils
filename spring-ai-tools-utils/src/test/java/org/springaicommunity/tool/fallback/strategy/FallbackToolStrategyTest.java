@@ -29,8 +29,6 @@ class FallbackToolStrategyTest {
         assertThat(strategy.fallback("other-input", new IllegalStateException())).isEqualTo("service down");
     }
 
-    // ── withMethod — no-params signature ────────────────────────────────────
-
     @Test
     void withMethod_invokesNoParamFallback() throws Exception {
         Method m = FallbackMethods.class.getDeclaredMethod("noParams");
@@ -38,8 +36,6 @@ class FallbackToolStrategyTest {
 
         assertThat(strategy.fallback("input", cause)).isEqualTo("no-params");
     }
-
-    // ── withMethod — cause-only signature ───────────────────────────────────
 
     @Test
     void withMethod_invokesCauseOnlyFallback() throws Exception {
@@ -49,8 +45,6 @@ class FallbackToolStrategyTest {
         assertThat(strategy.fallback("input", cause)).isEqualTo("cause:original");
     }
 
-    // ── withMethod — input-only signature ───────────────────────────────────
-
     @Test
     void withMethod_invokesInputOnlyFallback() throws Exception {
         Method m = FallbackMethods.class.getDeclaredMethod("withInputOnly", String.class);
@@ -59,8 +53,6 @@ class FallbackToolStrategyTest {
         assertThat(strategy.fallback("hello", cause)).isEqualTo("input:hello");
     }
 
-    // ── withMethod — input + cause signature ────────────────────────────────
-
     @Test
     void withMethod_invokesInputAndCauseFallback() throws Exception {
         Method m = FallbackMethods.class.getDeclaredMethod("withInputAndCause", String.class, Throwable.class);
@@ -68,8 +60,6 @@ class FallbackToolStrategyTest {
 
         assertThat(strategy.fallback("hello", cause)).isEqualTo("input:hello,cause:original");
     }
-
-    // ── edge cases ───────────────────────────────────────────────────────────
 
     @Test
     void withMethod_returnsEmptyString_whenFallbackMethodReturnsNull() throws Exception {
@@ -88,4 +78,5 @@ class FallbackToolStrategyTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("throwsException");
     }
+
 }

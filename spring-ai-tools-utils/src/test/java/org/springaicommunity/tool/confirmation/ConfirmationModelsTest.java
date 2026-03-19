@@ -14,8 +14,6 @@ import static org.mockito.Mockito.when;
 
 class ConfirmationModelsTest {
 
-    // ── ConfirmationResult ────────────────────────────────────────────────────
-
     @Test
     void confirmationResult_approved_isApprovedTrue() {
         ConfirmationResult result = ConfirmationResult.approved();
@@ -34,8 +32,6 @@ class ConfirmationModelsTest {
         assertThat(result.rejectionMessage()).isEqualTo("policy violation");
     }
 
-    // ── ToolRejectionException ────────────────────────────────────────────────
-
     @Test
     void toolRejectionException_exposesToolNameAndInput() {
         ToolRejectionException ex =
@@ -51,8 +47,6 @@ class ConfirmationModelsTest {
         assertThat(new ToolRejectionException("t", "i", "r"))
             .isInstanceOf(RuntimeException.class);
     }
-
-    // ── AutoApproveConfirmationHandler ────────────────────────────────────────
 
     @Test
     void autoApproveConfirmationHandler_alwaysApproves() {
@@ -83,8 +77,6 @@ class ConfirmationModelsTest {
             .isSameAs(AutoApproveConfirmationHandler.INSTANCE);
     }
 
-    // ── ConfirmationProperties ────────────────────────────────────────────────
-
     @Test
     void confirmationProperties_defaults() {
         ConfirmationProperties props = new ConfirmationProperties();
@@ -100,8 +92,6 @@ class ConfirmationModelsTest {
         assertThat(props.maxPending()).isEqualTo(50);
         assertThat(props.timeout()).isEqualTo(Duration.ofSeconds(10));
     }
-
-    // ── PendingConfirmation ───────────────────────────────────────────────────
 
     @Test
     void pendingConfirmation_of_populatesFieldsFromRequest() {

@@ -22,8 +22,6 @@ class BuiltinGuardrailsTest {
         return d;
     }
 
-    // ── PathTraversalInputGuardrail ───────────────────────────────────────────
-
     @Test
     void pathTraversal_passes_cleanInput() {
         ToolInputGuardrail g = Guardrails.pathTraversal();
@@ -37,8 +35,6 @@ class BuiltinGuardrailsTest {
         ToolInputGuardrail g = Guardrails.pathTraversal();
         assertThat(g.evaluate(def("t"), "../../etc/passwd").isPass()).isFalse();
     }
-
-    // ── SqlInjectionInputGuardrail ────────────────────────────────────────────
 
     @Test
     void sqlInjection_passes_normalQuery() {
@@ -65,8 +61,6 @@ class BuiltinGuardrailsTest {
         assertThat(g.evaluate(def("t"), "Delete from orders").isPass()).isFalse();
     }
 
-    // ── MaxInputSizeInputGuardrail ────────────────────────────────────────────
-
     @Test
     void maxInputSize_passes_inputWithinLimit() {
         ToolInputGuardrail g = Guardrails.maxInputSize(100);
@@ -89,8 +83,6 @@ class BuiltinGuardrailsTest {
         assertThat(g.evaluate(def("t"), "hello").isPass()).isTrue();
     }
 
-    // ── blockKeywords ─────────────────────────────────────────────────────────
-
     @Test
     void blockKeywords_passes_inputWithNoBlockedWord() {
         ToolInputGuardrail g = Guardrails.blockKeywords(List.of("secret", "confidential"));
@@ -111,8 +103,6 @@ class BuiltinGuardrailsTest {
         assertThat(g.evaluate(def("t"), "reveal SECRET key").isPass()).isFalse();
     }
 
-    // ── allowedTools ──────────────────────────────────────────────────────────
-
     @Test
     void allowedTools_passes_toolInAllowedSet() {
         ToolInputGuardrail g = Guardrails.allowedTools(Set.of("search", "summarize"));
@@ -126,8 +116,6 @@ class BuiltinGuardrailsTest {
         assertThat(r.isPass()).isFalse();
         assertThat(r.failureMessage()).contains("deleteTool");
     }
-
-    // ── SensitiveDataOutputGuardrail ──────────────────────────────────────────
 
     @Test
     void sensitiveData_passes_cleanOutput() {
@@ -159,8 +147,6 @@ class BuiltinGuardrailsTest {
         assertThat(r.sanitizedOutput()).doesNotContain("sk-supersecretkey");
     }
 
-    // ── MaxOutputSizeOutputGuardrail ──────────────────────────────────────────
-
     @Test
     void maxOutputSize_passes_outputWithinLimit() {
         ToolOutputGuardrail g = Guardrails.maxOutputSize(100);
@@ -176,8 +162,6 @@ class BuiltinGuardrailsTest {
         assertThat(r.isPass()).isFalse();
         assertThat(r.failureMessage()).contains("7").contains("5").contains("myTool");
     }
-
-    // ── redactPattern ─────────────────────────────────────────────────────────
 
     @Test
     void redactPattern_replacesMatchingContent() {
@@ -195,4 +179,5 @@ class BuiltinGuardrailsTest {
         OutputGuardrailResult r = g.evaluate(def("t"), "No SSN here");
         assertThat(r.sanitizedOutput()).isEqualTo("No SSN here");
     }
+
 }

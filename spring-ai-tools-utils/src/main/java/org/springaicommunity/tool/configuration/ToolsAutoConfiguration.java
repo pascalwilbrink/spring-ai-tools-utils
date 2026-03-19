@@ -1,5 +1,6 @@
 package org.springaicommunity.tool.configuration;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springaicommunity.tool.callback.ToolCallbacksFactory;
 import org.springaicommunity.tool.confirmation.callback.ConfirmableToolCallbacks;
 import org.springaicommunity.tool.confirmation.properties.ConfirmationProperties;
@@ -7,11 +8,13 @@ import org.springaicommunity.tool.confirmation.store.ConfirmationStore;
 import org.springaicommunity.tool.confirmation.store.InMemoryConfirmationStore;
 import org.springaicommunity.tool.fallback.callback.FallbackToolCallbacks;
 import org.springaicommunity.tool.guardrails.callback.GuardedToolCallbacks;
+import org.springaicommunity.tool.ratelimit.callback.RateLimitedToolCallbacks;
 import org.springaicommunity.tool.retry.callback.RetryableToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -71,6 +74,16 @@ public class ToolsAutoConfiguration {
     }
 
     /**
+     * Provides the default {@link RateLimitedToolCallbacks} bean for attaching fallback
+     * strategies to tool callbacks.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public RateLimitedToolCallbacks rateLimitedToolCallbacks(ApplicationContext ctx) {
+        return new RateLimitedToolCallbacks(ctx);
+    }
+
+    /**
      * Provides the default {@link RetryableToolCallbacks} bean for retrying failed
      * tool calls when annotated with {@code @RetryableTool}.
      */
@@ -86,17 +99,40 @@ public class ToolsAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnClass(name = "io.micrometer.core.instrument.MeterRegistry")
     public ToolCallbacksFactory toolCallbacksFactory(
-        GuardedToolCallbacks guardedToolCallbacks,
-        ConfirmableToolCallbacks confirmableToolCallbacks,
-        FallbackToolCallbacks fallbackToolCallbacks,
-        RetryableToolCallbacks retryableToolCallbacks
-    ) {
+            GuardedToolCallbacks guardedToolCallbacks,
+            RateLimitedToolCallbacks rateLimitedToolCallbacks,
+            RetryableToolCallbacks retryableToolCallbacks,
+            ConfirmableToolCallbacks confirmableToolCallbacks,
+            FallbackToolCallbacks fallbackToolCallbacks,
+            MeterRegistry meterRegistry) {
         return new ToolCallbacksFactory(
-            guardedToolCallbacks,
-            confirmableToolCallbacks,
-            fallbackToolCallbacks,
-            retryableToolCallbacks
+                guardedToolCallbacks,
+                confirmableToolCallbacks,
+                fallbackToolCallbacks,
+                retryableToolCallbacks,
+                rateLimitedToolCallbacks,
+                meterRegistry
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnMissingClass("io.micrometer.core.instrument.MeterRegistry")
+    public ToolCallbacksFactory toolCallbacksFactoryWithoutMetrics(
+            GuardedToolCallbacks guardedToolCallbacks,
+            RateLimitedToolCallbacks rateLimitedToolCallbacks,
+            RetryableToolCallbacks retryableToolCallbacks,
+            ConfirmableToolCallbacks confirmableToolCallbacks,
+            FallbackToolCallbacks fallbackToolCallbacks) {
+        return new ToolCallbacksFactory(
+                guardedToolCallbacks,
+                confirmableToolCallbacks,
+                fallbackToolCallbacks,
+                retryableToolCallbacks,
+                rateLimitedToolCallbacks,
+                null
         );
     }
 }

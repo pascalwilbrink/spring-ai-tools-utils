@@ -1,5 +1,6 @@
 package org.springaicommunity.tool.callback;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,6 +11,7 @@ import org.mockito.quality.Strictness;
 import org.springaicommunity.tool.confirmation.callback.ConfirmableToolCallbacks;
 import org.springaicommunity.tool.fallback.callback.FallbackToolCallbacks;
 import org.springaicommunity.tool.guardrails.callback.GuardedToolCallbacks;
+import org.springaicommunity.tool.ratelimit.callback.RateLimitedToolCallbacks;
 import org.springaicommunity.tool.retry.callback.RetryableToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.annotation.Tool;
@@ -32,10 +34,12 @@ class ToolCallbacksFactoryTest {
     @Mock FallbackToolCallbacks fallbackToolCallbacks;
     @Mock
     RetryableToolCallbacks retryableToolCallbacks;
-    
-    ToolCallbacksFactory factory;
+    @Mock
+    RateLimitedToolCallbacks rateLimitedToolCallbacks;
+    @Mock
+    MeterRegistry meterRegistry;
 
-    // ── tool fixtures ─────────────────────────────────────────────────────────
+    ToolCallbacksFactory factory;
 
     static class SingleToolObject {
         @Tool(name = "myTool")
@@ -57,38 +61,39 @@ class ToolCallbacksFactoryTest {
     }
 
 
-    // ── setup ─────────────────────────────────────────────────────────────────
-
     @BeforeEach
     void setUp() {
         factory = new ToolCallbacksFactory(
-            guardedToolCallbacks, confirmableToolCallbacks, fallbackToolCallbacks, retryableToolCallbacks
+            guardedToolCallbacks, confirmableToolCallbacks, fallbackToolCallbacks, retryableToolCallbacks, rateLimitedToolCallbacks, meterRegistry
         );
     }
 
-    // ── decorator chaining ────────────────────────────────────────────────────
-
     @Test
-    void from_appliesDecoratorsInOrder_guardedThenConfirmableThenRetryableThenFallback() {
+    void from_appliesDecoratorsInOrder_guardedRateLimitedRetryableConfirmableFallback() {
         ToolCallback guardedCb     = mock(ToolCallback.class);
-        ToolCallback confirmableCb = mock(ToolCallback.class);
+        ToolCallback rateLimitedCb = mock(ToolCallback.class);
         ToolCallback retryableCb   = mock(ToolCallback.class);
-        ToolCallback fallbackCb    = mock(ToolCallback.class);
+        ToolCallback confirmableCb = mock(ToolCallback.class);
 
         // Each wrapper receives the output of the previous one
         when(guardedToolCallbacks.wrap(any(ToolCallback.class), any(Method.class)))
             .thenReturn(guardedCb);
-        when(confirmableToolCallbacks.wrap(eq(guardedCb), any(Method.class)))
-            .thenReturn(confirmableCb);
-        when(retryableToolCallbacks.wrap(eq(confirmableCb), any(Method.class), any()))
+        when(rateLimitedToolCallbacks.wrap(eq(guardedCb), any(Method.class)))
+            .thenReturn(rateLimitedCb);
+        when(retryableToolCallbacks.wrap(eq(rateLimitedCb), any(Method.class)))
             .thenReturn(retryableCb);
-        when(fallbackToolCallbacks.wrap(eq(retryableCb), any(Method.class), any()))
-            .thenReturn(fallbackCb);
+        when(confirmableToolCallbacks.wrap(eq(retryableCb), any(Method.class)))
+            .thenReturn(confirmableCb);
+        when(fallbackToolCallbacks.wrap(eq(confirmableCb), any(Method.class), any()))
+            .thenAnswer(inv -> inv.getArgument(0)); // pass-through so logging can wrap it
 
-        ToolCallback[] result = factory.from(new SingleToolObject());
+        factory.from(new SingleToolObject());
 
-        assertThat(result).hasSize(1);
-        assertThat(result[0]).isSameAs(fallbackCb);
+        // eq() stubs prove each layer received the output of the previous one
+        verify(rateLimitedToolCallbacks).wrap(eq(guardedCb), any(Method.class));
+        verify(retryableToolCallbacks).wrap(eq(rateLimitedCb), any(Method.class));
+        verify(confirmableToolCallbacks).wrap(eq(retryableCb), any(Method.class));
+        verify(fallbackToolCallbacks).wrap(eq(confirmableCb), any(Method.class), any());
     }
 
     @Test
@@ -99,8 +104,6 @@ class ToolCallbacksFactoryTest {
 
         assertThat(result).hasSize(2);
     }
-
-    // ── method lookup ─────────────────────────────────────────────────────────
 
     @Test
     void from_findsMethodByExplicitToolName() {
@@ -127,29 +130,32 @@ class ToolCallbacksFactoryTest {
 
         ToolCallback[] result = factory.from(new TwoToolObject());
 
-        // Both methods must pass through all four decoration layers
+        // Both methods must pass through all five decoration layers
         assertThat(result).hasSize(2);
         verify(guardedToolCallbacks, org.mockito.Mockito.times(2))
             .wrap(any(ToolCallback.class), any(Method.class));
-        verify(confirmableToolCallbacks, org.mockito.Mockito.times(2))
+        verify(rateLimitedToolCallbacks, org.mockito.Mockito.times(2))
             .wrap(any(ToolCallback.class), any(Method.class));
         verify(retryableToolCallbacks, org.mockito.Mockito.times(2))
-            .wrap(any(ToolCallback.class), any(Method.class), any());
+            .wrap(any(ToolCallback.class), any(Method.class));
+        verify(confirmableToolCallbacks, org.mockito.Mockito.times(2))
+            .wrap(any(ToolCallback.class), any(Method.class));
         verify(fallbackToolCallbacks, org.mockito.Mockito.times(2))
             .wrap(any(ToolCallback.class), any(Method.class), any());
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
-
-    /** Configure all four wrappers to return whatever they receive (pass-through). */
+    /** Configure all five wrappers to return whatever they receive (pass-through). */
     private void passThrough() {
         when(guardedToolCallbacks.wrap(any(ToolCallback.class), any(Method.class)))
             .thenAnswer(inv -> inv.getArgument(0));
-        when(confirmableToolCallbacks.wrap(any(ToolCallback.class), any(Method.class)))
+        when(rateLimitedToolCallbacks.wrap(any(ToolCallback.class), any(Method.class)))
             .thenAnswer(inv -> inv.getArgument(0));
-        when(retryableToolCallbacks.wrap(any(ToolCallback.class), any(Method.class), any()))
+        when(retryableToolCallbacks.wrap(any(ToolCallback.class), any(Method.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        when(confirmableToolCallbacks.wrap(any(ToolCallback.class), any(Method.class)))
             .thenAnswer(inv -> inv.getArgument(0));
         when(fallbackToolCallbacks.wrap(any(ToolCallback.class), any(Method.class), any()))
             .thenAnswer(inv -> inv.getArgument(0));
     }
+
 }

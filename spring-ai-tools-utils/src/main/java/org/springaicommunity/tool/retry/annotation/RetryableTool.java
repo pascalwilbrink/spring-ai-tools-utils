@@ -29,4 +29,28 @@ public @interface RetryableTool {
      */
     int maxRetries() default 3;
 
+    /**
+     * Delay between retry attempts in milliseconds. Defaults to {@code 1000}.
+     */
+    long delay() default 1000;
+
+    /**
+     * Multiplier for exponential backoff. Defaults to {@code 1.0} (fixed delay).
+     * Set to a value greater than 1.0 to enable exponential backoff.
+     * For example, 2.0 doubles the delay after each attempt.
+     */
+    double multiplier() default 1.0;
+
+    /**
+     * Exception types that should trigger a retry.
+     * Defaults to {@code RuntimeException.class} — all runtime exceptions.
+     */
+    Class<? extends Throwable>[] retryOn() default { RuntimeException.class };
+
+    /**
+     * Exception types that should NOT trigger a retry, even if they match {@link #retryOn()}.
+     * Useful for skipping retries on specific known non-transient exceptions.
+     */
+    Class<? extends Throwable>[] noRetryOn() default {};
+
 }

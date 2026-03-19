@@ -9,8 +9,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class GuardrailModelsTest {
 
-    // ── InputGuardrailResult ──────────────────────────────────────────────────
-
     @Test
     void inputGuardrailResult_pass_isPassTrue() {
         InputGuardrailResult result = InputGuardrailResult.pass("safe input");
@@ -30,8 +28,6 @@ class GuardrailModelsTest {
         assertThat(result.failureMessage()).isEqualTo("contains PII");
         assertThat(result.status()).isEqualTo(InputGuardrailResult.Status.BLOCKED);
     }
-
-    // ── OutputGuardrailResult ─────────────────────────────────────────────────
 
     @Test
     void outputGuardrailResult_pass_isPassTrue() {
@@ -53,8 +49,6 @@ class GuardrailModelsTest {
         assertThat(result.status()).isEqualTo(OutputGuardrailResult.Status.BLOCKED);
     }
 
-    // ── GuardrailViolationException ───────────────────────────────────────────
-
     @Test
     void guardrailViolationException_exposesToolNameAndInput() {
         GuardrailViolationException ex =
@@ -70,4 +64,5 @@ class GuardrailModelsTest {
         assertThat(new GuardrailViolationException("t", "i", "r"))
             .isInstanceOf(RuntimeException.class);
     }
+
 }

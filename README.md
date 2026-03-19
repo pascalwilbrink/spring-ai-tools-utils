@@ -1,6 +1,6 @@
 # Spring AI Tools Utils
 
-A Spring AI community library that adds **guardrails**, **human confirmation**, **automatic retry**, and **fallback strategies** to Spring AI tool callbacks through a clean annotation-driven decorator pattern.
+A Spring AI community library that adds **guardrails**, **human confirmation**, **rate limiting**, **automatic retry**, **fallback strategies**, **structured logging**, and **Micrometer metrics** to Spring AI tool callbacks through a clean annotation-driven decorator pattern.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
@@ -13,8 +13,11 @@ A Spring AI community library that adds **guardrails**, **human confirmation**, 
 | **Input Guardrails** | Validate and sanitize tool input before execution |
 | **Output Guardrails** | Validate and sanitize tool output before it reaches the model |
 | **Tool Confirmation** | Require human approval before a tool runs |
+| **Rate Limiting** | Cap tool invocations per second, minute, or hour |
 | **Automatic Retry** | Retry a failing tool transparently using Spring Retry |
 | **Fallback Strategies** | Return a safe response when a tool throws an exception |
+| **Structured Logging** | Automatic DEBUG/WARN/ERROR logging with duration for every tool call |
+| **Micrometer Metrics** | Call count and duration metrics tagged by tool name and outcome |
 | **Built-in Guardrails** | SQL injection, path traversal, sensitive data redaction, size limits, keyword blocking |
 | **Auto-configuration** | Zero-config Spring Boot integration |
 
@@ -115,6 +118,27 @@ Register it as a `@Bean` for injection, or rely on the no-arg constructor fallba
 
 ---
 
+## Rate Limiting
+
+Cap how often a tool can be called within a time window. Calls that exceed the limit throw `RateLimitExceededException` immediately.
+
+### Annotate your tool
+
+```java
+@Tool(description = "Get the current exchange rate")
+@RateLimitedTool(requests = 60, per = RateLimitedTool.RateLimit.MINUTE)
+public String getExchangeRate(String currency) {
+    return ratesApi.fetch(currency);
+}
+```
+
+| Attribute | Default | Description |
+|---|---|---|
+| `requests` | `10` | Maximum number of calls allowed within the window |
+| `per` | `MINUTE` | Time window: `SECOND`, `MINUTE`, or `HOUR` |
+
+---
+
 ## Tool Confirmation
 
 Require explicit human approval before a tool runs. Rejection throws `ToolRejectionException`.
@@ -184,7 +208,33 @@ public String fetchData(String query) {
 }
 ```
 
-`maxRetries` is the number of additional attempts after the initial call fails. With `maxRetries = 3` the tool is called at most 4 times (1 initial + 3 retries) before the last exception is rethrown. A fixed 1-second back-off is applied between attempts.
+`maxRetries` is the number of additional attempts after the initial call fails. With `maxRetries = 3` the tool is called at most 4 times (1 initial + 3 retries) before the last exception is rethrown.
+
+### All attributes
+
+| Attribute | Default | Description |
+|---|---|---|
+| `maxRetries` | `3` | Number of retry attempts after the initial failure (must be ≥ 1) |
+| `delay` | `1000` | Delay between attempts in milliseconds |
+| `multiplier` | `1.0` | Backoff multiplier; set > 1.0 for exponential backoff (e.g. `2.0`) |
+| `retryOn` | `RuntimeException.class` | Exception types that trigger a retry |
+| `noRetryOn` | _(empty)_ | Exception types that are never retried, even if they match `retryOn` |
+
+### Exponential backoff
+
+```java
+@RetryableTool(maxRetries = 5, delay = 500, multiplier = 2.0)
+public String callExternalApi(String input) { ... }
+// delays: 500ms, 1000ms, 2000ms, 4000ms, 8000ms
+```
+
+### Selective retry
+
+```java
+@RetryableTool(maxRetries = 3, retryOn = { IOException.class },
+               noRetryOn = { IllegalArgumentException.class })
+public String callService(String input) { ... }
+```
 
 ---
 
@@ -218,6 +268,36 @@ public String stockPriceFailed(String ticker, Throwable cause) { ... }
 
 ---
 
+## Logging
+
+Every tool call is automatically logged at `DEBUG` level with the tool name and elapsed time. Specific failure types (guardrail violations, rejections, rate limit, unexpected errors) are logged at `WARN` or `ERROR`. No annotation is required — logging is applied to all tools automatically.
+
+```
+DEBUG Tool call started  | tool=getWeather input={"city":"Amsterdam"}
+DEBUG Tool call success  | tool=getWeather duration=42ms output={"temp":18}
+WARN  Tool call blocked  | tool=query duration=1ms reason=SQL Injection detected...
+ERROR Tool call failed   | tool=fetchData duration=3210ms error=Connection timed out
+```
+
+The logger name is `org.springaicommunity.tool.logging.callback.LoggingToolCallback`.
+
+---
+
+## Metrics
+
+When Micrometer is on the classpath (e.g. via `spring-boot-starter-actuator`), each tool call emits two metrics:
+
+| Metric | Type | Tags |
+|---|---|---|
+| `tools.call.duration` | Timer | `tool`, `outcome` |
+| `tools.call.count` | Counter | `tool`, `outcome` |
+
+Possible `outcome` values: `success`, `blocked`, `rejected`, `rate_limited`, `failure`.
+
+Metrics are applied automatically to all tools when a `MeterRegistry` bean is present — no annotation required.
+
+---
+
 ## Decorator Stack
 
 Decorators are applied in this order when you call `ToolCallbacksFactory.from(toolBean)`:
@@ -225,12 +305,17 @@ Decorators are applied in this order when you call `ToolCallbacksFactory.from(to
 ```
 ToolCallback (raw Spring AI callback)
     └── GuardedToolCallback         ← @InputGuardrail / @OutputGuardrail
-            └── ConfirmableToolCallback     ← @ConfirmableTool
+            └── RateLimitedToolCallback     ← @RateLimitedTool
                     └── RetryableToolCallback      ← @RetryableTool
-                            └── FallbackToolCallback      ← @FallbackTool
+                            └── ConfirmableToolCallback   ← @ConfirmableTool
+                                    └── FallbackToolCallback      ← @FallbackTool
+                                            └── LoggingToolCallback       ← always applied
+                                                    └── MetricsToolCallback   ← applied when Micrometer is present
 ```
 
-The outermost layer (fallback) catches exceptions from any inner layer, including retries that have been exhausted.
+Annotation-driven layers (guarded, rate-limited, retryable, confirmable, fallback) are only added when the corresponding annotation is present on the method. Logging and metrics are always applied to every tool.
+
+The outermost layer (logging/metrics) records the final outcome — after all retries have been exhausted and after the fallback has been applied.
 
 ---
 
@@ -251,13 +336,21 @@ spring-ai-tools-utils/          # Published library artifact
     callback/                   # ConfirmableToolCallback, ConfirmableToolCallbacks
     store/                      # ConfirmationStore, InMemoryConfirmationStore
     properties/, exception/
+  ratelimit/
+    annotation/                 # @RateLimitedTool
+    callback/                   # RateLimitedToolCallback, RateLimitedToolCallbacks
+    exception/                  # RateLimitExceededException
+  retry/
+    annotation/                 # @RetryableTool
+    callback/                   # RetryableToolCallback, RetryableToolCallbacks
   fallback/
     annotation/                 # @FallbackTool
     callback/                   # FallbackToolCallback, FallbackToolCallbacks
     strategy/                   # FallbackToolStrategy
-  retry/
-    annotation/                 # @RetryableTool
-    callback/                   # RetryableToolCallback, RetryableToolCallbacks
+  logging/
+    callback/                   # LoggingToolCallback (always applied)
+  metrics/
+    callback/                   # MetricsToolCallback (applied when Micrometer is present)
   configuration/                # ToolsAutoConfiguration (Spring Boot auto-config)
 examples/
   tool-guardrails/              # Guardrail usage demo
